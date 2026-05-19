@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { getAccountToken, getAllAccounts } from "@/lib/github-accounts";
 import { GITHUB_API } from "@/lib/github";
 import { supabaseAdmin } from "@/lib/supabase";
+import { resolveAppUser } from "@/lib/resolve-user";
 
 export const dynamic = "force-dynamic";
 
@@ -139,28 +140,11 @@ export async function GET(req: NextRequest) {
   const accountId = req.nextUrl.searchParams.get("accountId");
   let appUserId: string | null = null;
 
-  if (accountId) {
-    const { data: userRow } = await supabaseAdmin
-      .from("users")
-      .select("id")
-      .eq("github_id", session.githubId)
-      .single();
+  const userRow = await resolveAppUser(session.githubId, session.githubLogin);
+  appUserId = userRow?.id ?? null;
 
-    if (!userRow) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    appUserId = userRow.id;
-  } else {
-    const { data: dbUser } = await supabaseAdmin
-      .from("users")
-      .select("id")
-      .eq("github_id", session.githubId)
-      .single();
-
-    if (dbUser) {
-      appUserId = dbUser.id;
-    }
+  if (accountId && !appUserId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const since = new Date();
