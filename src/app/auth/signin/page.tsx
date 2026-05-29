@@ -1,36 +1,18 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  getAuthErrorMessage,
+  normalizeAuthError,
+} from "@/lib/auth-error-message";
 
 
 const A = "#818cf8";
 const ERR = "#f87171";
 const MONO = "var(--font-jetbrains, ui-monospace, monospace)";
 const DISP = "var(--font-syne, system-ui, sans-serif)";
-
-/** Maps NextAuth error codes → user-facing messages. */
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  github:
-    "GitHub sign-in failed. This is usually caused by incorrect OAuth credentials or a mismatched callback URL. Check your GitHub OAuth App settings and try again.",
-  OAuthCallback:
-    "The OAuth callback could not be completed. Please try signing in again.",
-  OAuthSignin:
-    "Could not start the GitHub sign-in flow. Please try again.",
-  Configuration:
-    "There is a server configuration error. Please contact the site administrator.",
-  AccessDenied:
-    "Access was denied. You may have cancelled the GitHub authorization.",
-  Verification:
-    "The sign-in link has expired or has already been used.",
-  Default:
-    "An unexpected authentication error occurred. Please try again.",
-};
-
-function getErrorMessage(error: string): string {
-  return AUTH_ERROR_MESSAGES[error] ?? AUTH_ERROR_MESSAGES.Default;
-}
 
 function AuthErrorBanner({ error }: { error: string }) {
   return (
@@ -69,7 +51,19 @@ function AuthErrorBanner({ error }: { error: string }) {
           lineHeight: 1.65,
         }}
       >
-        {getErrorMessage(error)}
+        {getAuthErrorMessage(error)}
+      </p>
+      <p
+        style={{
+          fontFamily: MONO,
+          fontSize: 11,
+          color: "#fca5a5",
+          margin: "8px 0 0",
+          lineHeight: 1.6,
+        }}
+      >
+        Next step: verify GITHUB_ID, GITHUB_SECRET, and the callback URL
+        ending in /api/auth/callback/github, then try signing in again.
       </p>
     </div>
   );
@@ -109,18 +103,25 @@ function MouseSpotlight() {
  */
 function SignInContent() {
   const searchParams = useSearchParams();
-  const error = searchParams.get("error");
+  const rawError = searchParams.get("error");
+  const [authError, setAuthError] = useState<string | null>(() =>
+    normalizeAuthError(rawError)
+  );
+
+  useEffect(() => {
+    setAuthError(normalizeAuthError(rawError));
+  }, [rawError]);
 
   // Clear the ?error= param from the URL immediately after reading it so
   // that refreshing the page or navigating back doesn't show a stale error
   // from a previous sign-in attempt.
   useEffect(() => {
-    if (error && typeof window !== "undefined") {
+    if (rawError && typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.delete("error");
       window.history.replaceState({}, "", url.toString());
     }
-  }, [error]);
+  }, [rawError]);
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4">
@@ -184,7 +185,7 @@ function SignInContent() {
           Track streaks, PR velocity &amp; coding growth.
         </p>
 
-        {error && <AuthErrorBanner error={error} />}
+        {authError && <AuthErrorBanner error={authError} />}
 
         <button
           onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
